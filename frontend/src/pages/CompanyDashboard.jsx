@@ -180,7 +180,7 @@ const CompanyDashboard = () => {
                   </TableHead>
                   <TableBody>
                     {offers
-                      .filter(offer => offer.status === 'PENDING')
+                      .filter(offer => offer.status === 'PENDING' || offer.status === 'REJECTED')
                       .map((offer) => (
                         <TableRow key={offer._id}>
                           <TableCell>{offer.requestId?.studentAddress?.name}</TableCell>
@@ -190,19 +190,40 @@ const CompanyDashboard = () => {
                           <TableCell>{(offer.interestRate * 100).toFixed(2)}%</TableCell>
                           <TableCell>{getStatusChip(offer.status)}</TableCell>
                           <TableCell>
-                            <Button
-                              size="small"
-                              onClick={() => navigate(`/offers/${offer._id}`)}
-                            >
-                              View Details
-                            </Button>
+                            {offer.status === 'PENDING' && (
+                              <Button
+                                size="small"
+                                onClick={() => navigate(`/offers/${offer._id}`)}
+                              >
+                                View Details
+                              </Button>
+                            )}
+                            {offer.status === 'REJECTED' && (
+                              <>
+                                <Chip label="Rejected" color="error" size="small" sx={{ mr: 1 }} />
+                                <Button
+                                  size="small"
+                                  color="error"
+                                  onClick={async () => {
+                                    if (window.confirm('Delete this offer?')) {
+                                      await companyApi.deleteOffer(offer._id);
+                                      // Remove from UI
+                                      const newOffers = offers.filter(o => o._id !== offer._id);
+                                      setOffers(newOffers);
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </Button>
+                              </>
+                            )}
                           </TableCell>
                         </TableRow>
                     ))}
-                    {offers.filter(o => o.status === 'PENDING').length === 0 && (
+                    {offers.filter(o => o.status === 'PENDING' || o.status === 'REJECTED').length === 0 && (
                       <TableRow>
                         <TableCell colSpan={7} align="center">
-                          No pending offers
+                          No pending or rejected offers
                         </TableCell>
                       </TableRow>
                     )}

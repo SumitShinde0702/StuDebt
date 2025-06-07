@@ -28,6 +28,9 @@ export const studentApi = {
     api.post(`/loan-requests/${requestId}/accept-offer`, { offerId, ...data }),
   getLoanRequestById: (id) => api.get(`/loan-requests/${id}`),
   updateLoanRequest: (id, data) => api.put(`/loan-requests/${id}`, data),
+  getOfferById: (id) => api.get(`/offers/${id}`),
+  rejectOffer: (id) => api.post(`/offers/${id}/reject`),
+  deleteOffer: (id) => api.delete(`/offers/${id}`),
 };
 
 // Company API calls
@@ -38,6 +41,7 @@ export const companyApi = {
   getAvailableRequests: () => api.get('/company/available-requests'),
   createOffer: (requestId, data) => 
     api.post(`/loan-requests/${requestId}/offers`, data),
+  deleteOffer: (id) => api.delete(`/offers/${id}`),
 };
 
 // Auth API calls

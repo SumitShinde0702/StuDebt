@@ -173,6 +173,41 @@ app.get('/api/loan-requests/:requestId/offers', async (req, res) => {
   }
 })
 
+// Get a single offer by ID
+app.get('/api/offers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const offer = await Offer.findById(id)
+      .populate({
+        path: 'companyAddress',
+        select: 'name industry location',
+        model: 'User',
+      })
+      .populate({
+        path: 'requestId',
+        populate: { path: 'studentAddress', select: 'name school program graduationYear', model: 'User' },
+      });
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+    res.json({ offer });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch offer' });
+  }
+});
+
+// Reject an offer
+app.post('/api/offers/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const offer = await Offer.findById(id);
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+    offer.status = 'REJECTED';
+    await offer.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to reject offer' });
+  }
+});
+
 // ---------------
 // 6. Route: Student accepts an Offer → create LoanAgreement + prepare NFT mint
 // POST /loan-requests/:requestId/accept-offer
@@ -231,6 +266,15 @@ app.post('/api/loan-requests/:requestId/accept-offer', async (req, res) => {
 
     loanReq.status = 'ACCEPTED'
     await loanReq.save()
+
+    // If studentSeed is missing or not a string, skip NFT minting
+    if (!studentSeed || typeof studentSeed !== 'string') {
+      return res.json({
+        loanId: newLoan._id,
+        mintTxJSON: null,
+        message: 'Offer accepted and statuses updated. NFT minting not performed (no studentSeed provided).'
+      });
+    }
 
     // === NEW: Pin the loan metadata JSON to IPFS via Pinata ===
     // Build your metadata object:
@@ -737,6 +781,7 @@ app.get('/api/student/offers', async (req, res) => {
     // Get all offers for these requests
     const offers = await Offer.find({ requestId: { $in: requestIds } })
       .populate('companyAddress', 'name industry location')
+      .populate('requestId', 'schoolAddress program')
       .sort({ createdAt: -1 });
     res.json({ offers });
   } catch (err) {
@@ -947,5 +992,15 @@ app.delete('/api/loan-requests/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete loan request' });
+  }
+});
+
+app.delete('/api/offers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Offer.findByIdAndDelete(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete offer' });
   }
 });

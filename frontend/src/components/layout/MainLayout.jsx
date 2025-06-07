@@ -21,6 +21,7 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon,
+  Close as CloseIcon,
   Dashboard as DashboardIcon,
   Person as PersonIcon,
   School as SchoolIcon,
@@ -35,6 +36,7 @@ const drawerWidth = 240;
 
 const MainLayout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(true); // for desktop
   const [anchorEl, setAnchorEl] = useState(null);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const theme = useTheme();
@@ -44,6 +46,10 @@ const MainLayout = ({ children }) => {
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
+  };
+
+  const handleDrawerOpenClose = () => {
+    setDrawerOpen(!drawerOpen);
   };
 
   const handleProfileMenuOpen = (event) => {
@@ -80,10 +86,15 @@ const MainLayout = ({ children }) => {
 
   const drawer = (
     <Box>
-      <Toolbar>
-        <Typography variant="h6" noWrap component="div">
-          StuDebt
-        </Typography>
+      <Toolbar sx={{ display: 'flex', alignItems: 'center', justifyContent: drawerOpen ? 'space-between' : 'center', px: 2 }}>
+        {drawerOpen && (
+          <Typography variant="h6" noWrap component="div">
+            StuDebt
+          </Typography>
+        )}
+        <IconButton onClick={handleDrawerOpenClose} sx={{ ml: drawerOpen ? 0 : 0 }}>
+          {drawerOpen ? <CloseIcon /> : <MenuIcon />}
+        </IconButton>
       </Toolbar>
       <List>
         {menuItems.map((item) => (
@@ -92,13 +103,14 @@ const MainLayout = ({ children }) => {
             key={item.text}
             onClick={() => navigate(item.path)}
             selected={location.pathname === item.path}
+            sx={{ justifyContent: drawerOpen ? 'flex-start' : 'center', px: 2 }}
           >
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.text} />
+            <ListItemIcon sx={{ minWidth: 0, mr: drawerOpen ? 2 : 'auto', justifyContent: 'center' }}>{item.icon}</ListItemIcon>
+            {drawerOpen && <ListItemText primary={item.text} />}
           </ListItem>
         ))}
       </List>
-      <Box sx={{ p: 2 }}>
+      <Box sx={{ p: 2, display: drawerOpen ? 'block' : 'none' }}>
         <FormControlLabel
           control={
             <Switch
@@ -118,16 +130,28 @@ const MainLayout = ({ children }) => {
       <AppBar
         position="fixed"
         sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
+          width: { sm: `calc(100% - ${drawerOpen ? drawerWidth : 56}px)` },
+          ml: { sm: `${drawerOpen ? drawerWidth : 56}px` },
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
         }}
       >
         <Toolbar>
           <IconButton
             color="inherit"
             edge="start"
+            onClick={handleDrawerOpenClose}
+            sx={{ mr: 2, display: { xs: 'none', sm: 'inline-flex' } }}
+          >
+            {drawerOpen ? <CloseIcon /> : <MenuIcon />}
+          </IconButton>
+          <IconButton
+            color="inherit"
+            edge="start"
             onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { sm: 'none' } }}
+            sx={{ mr: 2, display: { xs: 'inline-flex', sm: 'none' } }}
           >
             <MenuIcon />
           </IconButton>
@@ -167,8 +191,10 @@ const MainLayout = ({ children }) => {
       </AppBar>
       <Box
         component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        sx={{ width: { sm: drawerOpen ? drawerWidth : 56 }, flexShrink: { sm: 0 } }}
+        aria-label="sidebar"
       >
+        {/* Mobile Drawer */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -183,13 +209,22 @@ const MainLayout = ({ children }) => {
         >
           {drawer}
         </Drawer>
+        {/* Desktop Drawer */}
         <Drawer
           variant="permanent"
+          open={drawerOpen}
           sx={{
             display: { xs: 'none', sm: 'block' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: drawerOpen ? drawerWidth : 56,
+              transition: theme.transitions.create('width', {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.leavingScreen,
+              }),
+              overflowX: 'hidden',
+            },
           }}
-          open
         >
           {drawer}
         </Drawer>
@@ -202,6 +237,10 @@ const MainLayout = ({ children }) => {
           width: '100%',
           minHeight: '100vh',
           backgroundColor: theme.palette.background.default,
+          transition: theme.transitions.create(['margin', 'width'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
         }}
       >
         <Toolbar />
