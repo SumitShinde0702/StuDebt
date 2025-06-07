@@ -26,6 +26,9 @@ import {
   getXrplClient
 } from './xrplHelpers.js'
 
+// for the NFT metadata
+import { pinJSONToIPFS } from './pinata.js'
+
 const app = express()
 app.use(cors())
 app.use(bodyParser.json()) // parse JSON bodies
@@ -177,7 +180,7 @@ app.get('/api/loan-requests/:requestId/offers', async (req, res) => {
 app.post('/api/loan-requests/:requestId/accept-offer', async (req, res) => {
   try {
     const { requestId } = req.params
-    const { offerId, studentSeed, metadataURI } = req.body
+    const { offerId, studentSeed } = req.body
 
     // 6.1 Verify LoanRequest + Offer
     const loanReq = await LoanRequest.findById(requestId)
@@ -229,9 +232,29 @@ app.post('/api/loan-requests/:requestId/accept-offer', async (req, res) => {
     loanReq.status = 'ACCEPTED'
     await loanReq.save()
 
-    // 6.4 Prepare the NFT-mint TX for the student to sign
-    //      This returns an unsigned JSON and a signed blob; 
-    //      for simplicity we'll return the unsigned JSON so the front-end (XUMM) can sign it.
+    // === NEW: Pin the loan metadata JSON to IPFS via Pinata ===
+    // Build your metadata object:
+    const metadata = {
+      requestId: newLoan._id.toString(),
+      student:   loanReq.studentName,
+      studentAddress: loanReq.studentAddress,
+      schoolAddress:  loanReq.schoolAddress,
+      program:        loanReq.program,
+      principalDrops: newLoan.principalDrops,
+      interestRate:   newLoan.interestRate,
+      totalOwedDrops: newLoan.totalOwedDrops,
+      feeSchedule:    newLoan.feeSchedule.map(f => ({
+        amountDrops: f.amountDrops,
+        dueDate:     f.dueDate.toISOString().slice(0,10)
+      })),
+      workObligationYears: offer.workObligationYears,
+      tAndC_URI:           offer.tAndC_URI,
+      createdAt:           newLoan.createdAt.toISOString()
+    }
+    // Pin it:
+    const metadataURI = await pinJSONToIPFS(metadata)
+
+    // 6.4 Now prepare the NFT‐mint TX, using the IPFS URI
     const { txUnsignedJSON: mintTxJSON } = await prepareMintDebtNFT({
       studentSeed,
       metadataURI
