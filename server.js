@@ -149,8 +149,8 @@ app.post('/api/loan-requests/:requestId/offers', async (req, res) => {
     await newOffer.save()
 
     // Mark the LoanRequest as UNDER_NEGOTIATION
-    loanReq.status = 'UNDER_NEGOTIATION'
-    await loanReq.save()
+    // loanReq.status = 'UNDER_NEGOTIATION'
+    // await loanReq.save()
 
     return res.status(201).json({ offerId: newOffer._id })
   } catch (err) {
@@ -266,6 +266,12 @@ app.post('/api/loan-requests/:requestId/accept-offer', async (req, res) => {
 
     loanReq.status = 'ACCEPTED'
     await loanReq.save()
+
+    // Mark all other pending offers for this request as EXPIRED
+    await Offer.updateMany(
+      { requestId, status: 'PENDING', _id: { $ne: offerId } },
+      { $set: { status: 'EXPIRED' } }
+    );
 
     // If studentSeed is missing or not a string, skip NFT minting
     if (!studentSeed || typeof studentSeed !== 'string') {

@@ -179,51 +179,54 @@ const CompanyDashboard = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {offers
-                      .filter(offer => offer.status === 'PENDING' || offer.status === 'REJECTED')
-                      .map((offer) => (
-                        <TableRow key={offer._id}>
-                          <TableCell>{offer.requestId?.studentAddress?.name}</TableCell>
-                          <TableCell>{offer.requestId?.schoolAddress}</TableCell>
-                          <TableCell>{offer.requestId?.program}</TableCell>
-                          <TableCell>${Number(offer.requestId?.totalAmountDrops) / 1000000}</TableCell>
-                          <TableCell>{(offer.interestRate * 100).toFixed(2)}%</TableCell>
-                          <TableCell>{getStatusChip(offer.status)}</TableCell>
-                          <TableCell>
-                            {offer.status === 'PENDING' && (
+                    {offers.map((offer) => (
+                      <TableRow key={offer._id}>
+                        <TableCell>{offer.requestId?.studentAddress?.name}</TableCell>
+                        <TableCell>{offer.requestId?.schoolAddress}</TableCell>
+                        <TableCell>{offer.requestId?.program}</TableCell>
+                        <TableCell>${Number(offer.requestId?.totalAmountDrops) / 1000000}</TableCell>
+                        <TableCell>{(offer.interestRate * 100).toFixed(2)}%</TableCell>
+                        <TableCell>{getStatusChip(offer.status)}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="small"
+                            onClick={() => navigate(`/offers/${offer._id}`)}
+                            disabled={offer.status === 'EXPIRED'}
+                          >
+                            View Details
+                          </Button>
+                          {offer.status === 'REJECTED' && (
+                            <>
+                              <Chip label="Rejected" color="error" size="small" sx={{ mr: 1 }} />
                               <Button
                                 size="small"
-                                onClick={() => navigate(`/offers/${offer._id}`)}
+                                color="error"
+                                onClick={async () => {
+                                  if (window.confirm('Delete this offer?')) {
+                                    await companyApi.deleteOffer(offer._id);
+                                    // Remove from UI
+                                    const newOffers = offers.filter(o => o._id !== offer._id);
+                                    setOffers(newOffers);
+                                  }
+                                }}
                               >
-                                View Details
+                                Delete
                               </Button>
-                            )}
-                            {offer.status === 'REJECTED' && (
-                              <>
-                                <Chip label="Rejected" color="error" size="small" sx={{ mr: 1 }} />
-                                <Button
-                                  size="small"
-                                  color="error"
-                                  onClick={async () => {
-                                    if (window.confirm('Delete this offer?')) {
-                                      await companyApi.deleteOffer(offer._id);
-                                      // Remove from UI
-                                      const newOffers = offers.filter(o => o._id !== offer._id);
-                                      setOffers(newOffers);
-                                    }
-                                  }}
-                                >
-                                  Delete
-                                </Button>
-                              </>
-                            )}
-                          </TableCell>
-                        </TableRow>
+                            </>
+                          )}
+                          {offer.status === 'EXPIRED' && (
+                            <Chip label="Expired" color="default" size="small" sx={{ ml: 1 }} />
+                          )}
+                          {offer.status === 'ACCEPTED' && (
+                            <Chip label="Accepted" color="success" size="small" sx={{ ml: 1 }} />
+                          )}
+                        </TableCell>
+                      </TableRow>
                     ))}
-                    {offers.filter(o => o.status === 'PENDING' || o.status === 'REJECTED').length === 0 && (
+                    {offers.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={7} align="center">
-                          No pending or rejected offers
+                          No offers
                         </TableCell>
                       </TableRow>
                     )}
