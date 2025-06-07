@@ -12,7 +12,7 @@ const LoanAgreementSchema = new mongoose.Schema({
   requestId:        { type: mongoose.Schema.Types.ObjectId, ref: 'LoanRequest', required: true },
   offerId:          { type: mongoose.Schema.Types.ObjectId, ref: 'Offer',       required: true },
   studentAddress:   { type: String, required: true },
-  companyAddress:   { type: String, required: true },
+  companyAddress:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   schoolAddress:    { type: String, required: true },
   interestRate:     { type: Number, required: true },
   principalDrops:   { type: String, required: true }, // original principal in drops

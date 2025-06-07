@@ -22,6 +22,7 @@ import Sponsorships from './pages/Sponsorships';
 import NotFound from './pages/NotFound';
 import MakeOffer from './pages/MakeOffer';
 import OfferDetails from './pages/OfferDetails';
+import AgreementDetails from './pages/AgreementDetails';
 
 // Create a client for React Query
 const queryClient = new QueryClient();
@@ -136,6 +137,14 @@ const App = () => {
                 element={
                   <ProtectedRoute>
                     <OfferDetails />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/agreements/:id"
+                element={
+                  <ProtectedRoute>
+                    <AgreementDetails />
                   </ProtectedRoute>
                 }
               />

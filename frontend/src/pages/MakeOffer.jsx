@@ -80,7 +80,7 @@ const MakeOffer = () => {
     try {
       await companyApi.createOffer(id, {
         companyAddress: user.id || user._id,
-        interestRate: Number(form.interestRate),
+        interestRate: Number(form.interestRate) / 100,
         workObligationYears: Number(form.workObligationYears),
         tAndC_URI: form.tAndC,
       });

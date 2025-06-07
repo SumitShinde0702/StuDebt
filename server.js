@@ -842,12 +842,21 @@ app.get('/api/company/offers', async (req, res) => {
     if (decoded.role !== 'company') {
       return res.status(403).json({ error: 'Not authorized' });
     }
-    const offers = await Offer.find({ companyAddress: decoded.id })
+    let offers = await Offer.find({ companyAddress: decoded.id })
       .populate({
         path: 'requestId',
         populate: { path: 'studentAddress', select: 'name school program graduationYear' }
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+    offers = offers.map(o => {
+      if (o.requestId && typeof o.requestId.studentAddress === 'object' && o.requestId.studentAddress !== null && o.requestId.studentAddress.name) {
+        o.studentName = o.requestId.studentAddress.name;
+      } else if (o.requestId && o.requestId.studentName) {
+        o.requestId.studentAddress = { name: o.requestId.studentName };
+      }
+      return o;
+    });
     res.json({ offers });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -865,9 +874,33 @@ app.get('/api/company/agreements', async (req, res) => {
     if (decoded.role !== 'company') {
       return res.status(403).json({ error: 'Not authorized' });
     }
-    const agreements = await LoanAgreement.find({ companyAddress: decoded.id })
+    let agreements = await LoanAgreement.find({ companyAddress: decoded.id })
       .populate('studentAddress', 'name school program graduationYear')
-      .sort({ createdAt: -1 });
+      .populate('requestId', 'program schoolAddress')
+      .sort({ createdAt: -1 })
+      .lean();
+    // Fallback: if studentAddress is a string, fetch the user manually
+    for (let a of agreements) {
+      if (typeof a.studentAddress === 'string' && a.studentAddress.length === 24) {
+        const user = await User.findById(a.studentAddress).lean();
+        if (user) {
+          a.studentAddress = {
+            name: user.name,
+            school: user.school,
+            program: user.program,
+            graduationYear: user.graduationYear
+          };
+        }
+      }
+    }
+    agreements = agreements.map(a => {
+      if (typeof a.studentAddress === 'object' && a.studentAddress !== null && a.studentAddress.name) {
+        a.studentName = a.studentAddress.name;
+      } else if (a.studentName) {
+        a.studentAddress = { name: a.studentName };
+      }
+      return a;
+    });
     res.json({ agreements });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -886,9 +919,20 @@ app.get('/api/company/available-requests', async (req, res) => {
     if (decoded.role !== 'company') {
       return res.status(403).json({ error: 'Not authorized' });
     }
-    const requests = await LoanRequest.find({ status: 'OPEN' })
+    // Populate studentAddress as User
+    let requests = await LoanRequest.find({ status: 'OPEN' })
       .populate('studentAddress', 'name school program graduationYear')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+    // Fallback: if studentAddress is not populated, use studentName
+    requests = requests.map(r => {
+      if (typeof r.studentAddress === 'object' && r.studentAddress !== null && r.studentAddress.name) {
+        r.studentName = r.studentAddress.name;
+      } else if (r.studentName) {
+        r.studentAddress = { name: r.studentName };
+      }
+      return r;
+    });
     res.json({ requests });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1003,4 +1047,26 @@ app.delete('/api/offers/:id', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete offer' });
   }
+});
+
+app.get('/api/loan-agreements/:id', async (req, res) => {
+  let agreement = await LoanAgreement.findById(req.params.id)
+    .populate('companyAddress', 'name industry location')
+    .populate('studentAddress', 'name school program graduationYear')
+    .populate('requestId', 'program schoolAddress')
+    .lean();
+  if (!agreement) return res.status(404).json({ error: 'Not found' });
+  // Fallback: if studentAddress is a string, fetch the user manually
+  if (typeof agreement.studentAddress === 'string' && agreement.studentAddress.length === 24) {
+    const user = await User.findById(agreement.studentAddress).lean();
+    if (user) {
+      agreement.studentAddress = {
+        name: user.name,
+        school: user.school,
+        program: user.program,
+        graduationYear: user.graduationYear
+      };
+    }
+  }
+  res.json({ agreement });
 });

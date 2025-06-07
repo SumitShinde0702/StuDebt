@@ -563,7 +563,14 @@ const CreateLoanRequest = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="md" sx={{ py: 4 }}>
+      <Button
+        variant="outlined"
+        sx={{ mb: 2 }}
+        onClick={() => navigate('/student/dashboard')}
+      >
+        Back
+      </Button>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Create Loan Request
