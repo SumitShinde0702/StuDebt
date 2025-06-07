@@ -180,3 +180,5 @@ export async function prepareBurnNFT({ companySeed, nftTokenID }) {
     txSignedBlob: signed.tx_blob
   }
 }
+
+export { getXrplClient }
