@@ -1,0 +1,564 @@
+// server.js
+
+import express from 'express'
+import mongoose from 'mongoose'
+import bodyParser from 'body-parser'
+import dotenv from 'dotenv'
+dotenv.config()
+
+// Import our Mongoose models
+import LoanRequest from './models/LoanRequest.js'
+import Offer        from './models/Offer.js'
+import LoanAgreement from './models/LoanAgreement.js'
+
+// Import our XRPL helper functions
+import {
+  prepareMintDebtNFT,
+  prepareSellOfferZero,
+  prepareAcceptOffer,
+  prepareEscrowCreate,
+  prepareEscrowFinish,
+  prepareBurnNFT,
+  getXrplClient
+} from './xrplHelpers.js'
+
+const app = express()
+app.use(bodyParser.json()) // parse JSON bodies
+
+// 1. Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser:    true,
+  useUnifiedTopology: true
+})
+  .then(() => console.log('✅ Connected to MongoDB'))
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err)
+    process.exit(1)
+  })
+
+// ---------------
+// 2. Route: Student creates a LoanRequest
+// POST /loan-requests
+// Body: {
+//    studentAddress, studentName, schoolAddress,
+//    program, totalAmountDrops, feeSchedule: [{ amountDrops, dueDate }], graduationDate, industry, description
+// }
+app.post('/loan-requests', async (req, res) => {
+  try {
+    const {
+      studentAddress,
+      studentName,
+      schoolAddress,
+      program,
+      totalAmountDrops,
+      feeSchedule,
+      graduationDate,
+      industry,
+      description
+    } = req.body
+
+    // Create a new LoanRequest document
+    const newRequest = new LoanRequest({
+      studentAddress,
+      studentName,
+      schoolAddress,
+      program,
+      totalAmountDrops,
+      feeSchedule,
+      graduationDate,
+      industry,
+      description
+    })
+    await newRequest.save()
+
+    // Return the new requestId to the client
+    return res.status(201).json({ requestId: newRequest._id })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to create LoanRequest' })
+  }
+})
+
+// ---------------
+// 3. Route: Company lists all OPEN LoanRequests (with optional filter by industry)
+// GET /loan-requests?industry=Tech
+app.get('/loan-requests', async (req, res) => {
+  try {
+    const filter = { status: 'OPEN' }
+    if (req.query.industry) {
+      filter.industry = req.query.industry
+    }
+    const requests = await LoanRequest.find(filter).lean()
+    return res.json(requests)
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to fetch loan requests' })
+  }
+})
+
+// ---------------
+// 4. Route: Company creates an Offer for a particular LoanRequest
+// POST /loan-requests/:requestId/offers
+// Body: { companyAddress, interestRate, workObligationYears, tAndC_URI }
+app.post('/loan-requests/:requestId/offers', async (req, res) => {
+  try {
+    const { requestId } = req.params
+    const { companyAddress, interestRate, workObligationYears, tAndC_URI } = req.body
+
+    // Verify that the LoanRequest exists and is OPEN
+    const loanReq = await LoanRequest.findById(requestId)
+    if (!loanReq || loanReq.status !== 'OPEN') {
+      return res.status(400).json({ error: 'LoanRequest not found or not OPEN' })
+    }
+
+    // Create a new Offer document
+    const newOffer = new Offer({
+      requestId,
+      companyAddress,
+      interestRate,
+      workObligationYears,
+      tAndC_URI
+    })
+    await newOffer.save()
+
+    // Mark the LoanRequest as UNDER_NEGOTIATION
+    loanReq.status = 'UNDER_NEGOTIATION'
+    await loanReq.save()
+
+    return res.status(201).json({ offerId: newOffer._id })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to create Offer' })
+  }
+})
+
+// ---------------
+// 5. Route: Student views all PENDING Offers on their LoanRequest
+// GET /loan-requests/:requestId/offers
+app.get('/loan-requests/:requestId/offers', async (req, res) => {
+  try {
+    const { requestId } = req.params
+    const offers = await Offer.find({ requestId, status: 'PENDING' }).lean()
+    return res.json(offers)
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to fetch offers' })
+  }
+})
+
+// ---------------
+// 6. Route: Student accepts an Offer → create LoanAgreement + prepare NFT mint
+// POST /loan-requests/:requestId/accept-offer
+// Body: { offerId, studentSeed, metadataURI }
+app.post('/loan-requests/:requestId/accept-offer', async (req, res) => {
+  try {
+    const { requestId } = req.params
+    const { offerId, studentSeed, metadataURI } = req.body
+
+    // 6.1 Verify LoanRequest + Offer
+    const loanReq = await LoanRequest.findById(requestId)
+    if (!loanReq) {
+      return res.status(404).json({ error: 'LoanRequest not found' })
+    }
+    const offer = await Offer.findById(offerId)
+    if (!offer || offer.requestId.toString() !== requestId || offer.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Offer invalid or not PENDING' })
+    }
+    // (In production, also verify that the caller actually “owns” loanReq.studentAddress,
+    // e.g. via a signed challenge, JWT, or XUMM wallet integration.)
+
+    // 6.2 Build the LoanAgreement document
+    const principalDrops = loanReq.totalAmountDrops
+    // Calculate interest amount in drops (rounded down)
+    const interestAmountDrops = String(
+      Math.floor(Number(principalDrops) * Number(offer.interestRate))
+    )
+    const totalOwedDrops = String(Number(principalDrops) + Number(interestAmountDrops))
+
+    // Copy the fee schedule from LoanRequest
+    const feeSchedule = loanReq.feeSchedule.map(item => ({
+      amountDrops: item.amountDrops,
+      dueDate:     item.dueDate,
+      escrowIndex: null,
+      isReleased:  false
+    }))
+
+    const newLoan = new LoanAgreement({
+      requestId,
+      offerId,
+      studentAddress: loanReq.studentAddress,
+      companyAddress: offer.companyAddress,
+      schoolAddress:  loanReq.schoolAddress,
+      interestRate:   offer.interestRate,
+      principalDrops,
+      totalOwedDrops,
+      amountPaidDrops: '0',
+      feeSchedule,
+      status: 'AWAITING_FUNDING'
+    })
+    await newLoan.save()
+
+    // 6.3 Update statuses of Offer + LoanRequest
+    offer.status = 'ACCEPTED'
+    await offer.save()
+
+    loanReq.status = 'ACCEPTED'
+    await loanReq.save()
+
+    // 6.4 Prepare the NFT‐mint TX for the student to sign
+    //      This returns an unsigned JSON and a signed blob; 
+    //      for simplicity we’ll return the unsigned JSON so the front-end (XUMM) can sign it.
+    const { txUnsignedJSON: mintTxJSON } = await prepareMintDebtNFT({
+      studentSeed,
+      metadataURI
+    })
+
+    return res.json({
+      loanId: newLoan._id,
+      mintTxJSON
+      // Front-end should now push this JSON into XUMM or any XRPL wallet to sign & submit.
+    })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed in accept-offer' })
+  }
+})
+
+// ---------------
+// 7. Route: After the student’s client successfully submits the mint, 
+//          they will have the new nftTokenID. We let them call an endpoint
+//          to build the SellOffer(0) TX so the company can accept.
+// GET /loan-agreements/:loanId/prepare-sell-offer?studentSeed=…&nftTokenID=…
+app.get('/loan-agreements/:loanId/prepare-sell-offer', async (req, res) => {
+  try {
+    const { loanId } = req.params
+    const { studentSeed, nftTokenID } = req.query
+
+    const loan = await LoanAgreement.findById(loanId)
+    if (!loan || loan.status !== 'AWAITING_FUNDING') {
+      return res.status(400).json({ error: 'Loan not in AWAITING_FUNDING state' })
+    }
+
+    // Build the SellOffer(0) for that NFT
+    const { txUnsignedJSON: sellOfferJSON } = await prepareSellOfferZero({
+      studentSeed,
+      nftTokenID
+    })
+
+    return res.json({ sellOfferJSON })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to prepare sell-offer' })
+  }
+})
+
+// ---------------
+// 8. Route: Once the student’s SellOffer(0) succeeds on-chain, the client
+//          will get an OfferIndex (like a unique integer or hex). They
+//          notify us so we can store it.
+// POST /loan-agreements/:loanId/record-sell-offer
+// Body: { sellOfferIndex }
+app.post('/loan-agreements/:loanId/record-sell-offer', async (req, res) => {
+  try {
+    const { loanId } = req.params
+    const { sellOfferIndex } = req.body
+
+    const loan = await LoanAgreement.findById(loanId)
+    if (!loan || loan.status !== 'AWAITING_FUNDING') {
+      return res.status(400).json({ error: 'Loan not in AWAITING_FUNDING' })
+    }
+    loan.sellOfferIndex = sellOfferIndex
+    await loan.save()
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to record sell-offer' })
+  }
+})
+
+// ---------------
+// 9. Route: Company prepares an NFTokenAcceptOffer to “grab” that NFT
+// GET /loan-agreements/:loanId/prepare-accept-offer?companySeed=…
+app.get('/loan-agreements/:loanId/prepare-accept-offer', async (req, res) => {
+  try {
+    const { loanId } = req.params
+    const { companySeed } = req.query
+
+    const loan = await LoanAgreement.findById(loanId)
+    if (!loan || loan.status !== 'AWAITING_FUNDING' || !loan.sellOfferIndex) {
+      return res.status(400).json({ error: 'Loan not ready for funding' })
+    }
+
+    const { txUnsignedJSON: acceptJSON } = await prepareAcceptOffer({
+      companySeed,
+      sellOfferIndex: loan.sellOfferIndex
+    })
+    return res.json({ acceptJSON })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to prepare accept-offer' })
+  }
+})
+
+// ---------------
+// 10. Route: Once the company submits the NFTokenAcceptOffer on-chain,
+//           they send us the nftTokenID so we can mark “FUNDED”.
+// POST /loan-agreements/:loanId/record-accepted
+// Body: { nftTokenID }
+app.post('/loan-agreements/:loanId/record-accepted', async (req, res) => {
+  try {
+    const { loanId } = req.params
+    const { nftTokenID } = req.body
+
+    const loan = await LoanAgreement.findById(loanId)
+    if (!loan || loan.status !== 'AWAITING_FUNDING') {
+      return res.status(400).json({ error: 'Loan not in AWAITING_FUNDING' })
+    }
+
+    loan.nftTokenID = nftTokenID
+    loan.status = 'FUNDED'
+    await loan.save()
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to record accepted' })
+  }
+})
+
+// ---------------
+// 11. Route: Company asks for EscrowCreate TXs for each installment
+// GET /loan-agreements/:loanId/prepare-escrows?companySeed=…
+app.get('/loan-agreements/:loanId/prepare-escrows', async (req, res) => {
+  try {
+    const { loanId } = req.params
+    const { companySeed } = req.query
+
+    const loan = await LoanAgreement.findById(loanId)
+    if (!loan || loan.status !== 'FUNDED') {
+      return res.status(400).json({ error: 'Loan not in FUNDED state' })
+    }
+
+    const escrowTxs = []
+    for (let i = 0; i < loan.feeSchedule.length; i++) {
+      const feeItem = loan.feeSchedule[i]
+      // If we already created an EscrowFor this installment, skip it
+      if (feeItem.escrowIndex || feeItem.isReleased) continue
+
+      // Prepare an EscrowCreate for this item
+      const { txUnsignedJSON } = await prepareEscrowCreate({
+        companySeed,
+        schoolAddress: loan.schoolAddress,
+        amountDrops: feeItem.amountDrops,
+        dueDateIso: feeItem.dueDate.toISOString().slice(0, 10) // "YYYY-MM-DD"
+      })
+      escrowTxs.push({ installmentIndex: i, escrowTxJSON: txUnsignedJSON })
+    }
+    return res.json({ escrowTxs })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to prepare escrows' })
+  }
+})
+
+// ---------------
+// 12. Route: Once the company submits each EscrowCreate on-chain,
+//           they return the escrowSequence so we store it.
+// POST /loan-agreements/:loanId/record-escrow
+// Body: { installmentIndex, escrowSequence }
+app.post('/loan-agreements/:loanId/record-escrow', async (req, res) => {
+  try {
+    const { loanId } = req.params
+    const { installmentIndex, escrowSequence } = req.body
+
+    const loan = await LoanAgreement.findById(loanId)
+    if (!loan) {
+      return res.status(404).json({ error: 'Loan not found' })
+    }
+    loan.feeSchedule[installmentIndex].escrowIndex = escrowSequence
+    await loan.save()
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to record escrow' })
+  }
+})
+
+// ---------------
+// 13. Background job: finish matured escrows automatically
+// (Run every hour or so; here, we’ll just define the function and kick it off with setInterval)
+
+async function processMaturedEscrows() {
+  try {
+    const client = await getXrplClient()
+
+    // Find all loans in status=FUNDED where some feeSchedule items have:
+    //    escrowIndex != null AND isReleased == false
+    const loans = await LoanAgreement.find({
+      status: 'FUNDED',
+      'feeSchedule.escrowIndex': { $ne: null },
+      'feeSchedule.isReleased': false
+    })
+
+    for (const loan of loans) {
+      for (let i = 0; i < loan.feeSchedule.length; i++) {
+        const feeItem = loan.feeSchedule[i]
+        if (feeItem.isReleased || !feeItem.escrowIndex) continue
+
+        // Fetch the school’s account_objects of type "escrow"
+        const resp = await client.request({
+          command: 'account_objects',
+          account: loan.schoolAddress,
+          ledger_index: 'current',
+          type: 'escrow'
+        })
+        const escrows = resp.result.account_objects
+
+        // Find the matching escrow row
+        const matching = escrows.find(e => String(e.index) === String(feeItem.escrowIndex))
+        if (!matching) {
+          // Already finished or missing; mark isReleased = true
+          loan.feeSchedule[i].isReleased = true
+          continue
+        }
+
+        const nowUnix = Math.floor(Date.now() / 1000)
+        if (matching.FinishAfter <= nowUnix) {
+          // Prepare & submit EscrowFinish (signed by the school)
+          const { txSignedBlob } = await prepareEscrowFinish({
+            schoolSeed: process.env.SCHOOL_SECRET,
+            escrowSequence: Number(feeItem.escrowIndex)
+          })
+          const result = await client.submitAndWait(txSignedBlob)
+          if (result.result.meta.TransactionResult === 'tesSUCCESS') {
+            loan.feeSchedule[i].isReleased = true
+          }
+        }
+      }
+      // If all installments are released, move status to REPAYING
+      if (loan.feeSchedule.every(f => f.isReleased)) {
+        loan.status = 'REPAYING'
+      }
+      await loan.save()
+    }
+
+    await client.disconnect()
+  } catch (err) {
+    console.error('Error in processMaturedEscrows:', err)
+  }
+}
+
+// Run every hour (3600000 ms):
+setInterval(processMaturedEscrows, 60 * 60 * 1000)
+
+// ---------------
+// 14. WebSocket listener for student repayments
+//    We want to watch for any Payment from student → company with MemoType="LoanRepayment"
+//    and MemoData set to that loan’s ID. For simplicity, we’ll re-subscribe whenever the server starts.
+
+async function startPaymentListener() {
+  try {
+    const client = await getXrplClient()
+
+    // Find all loans that are in status=REPAYING
+    const loans = await LoanAgreement.find({ status: 'REPAYING' })
+    const accountsToWatch = loans.map(l => l.studentAddress)
+    if (accountsToWatch.length === 0) {
+      // No active repayment watchers
+      await client.disconnect()
+      return
+    }
+
+    // Subscribe to all those student accounts
+    await client.request({
+      command: 'subscribe',
+      accounts: accountsToWatch
+    })
+
+    client.on('transaction', async (event) => {
+      const tx = event.transaction
+      if (tx.TransactionType !== 'Payment') return
+
+      const from = tx.Account
+      const to   = tx.Destination
+      const amountDrops = tx.Amount
+      const memos = tx.Memos || []
+
+      if (memos.length === 0) return
+      // Decode the first memo
+      const memoType = Buffer.from(memos[0].Memo.MemoType, 'hex').toString('utf8')
+      const memoData = Buffer.from(memos[0].Memo.MemoData, 'hex').toString('utf8')
+      if (memoType !== 'LoanRepayment') return
+
+      // Look up the LoanAgreement by ID (memoData)
+      const loan = await LoanAgreement.findById(memoData)
+      if (!loan) return
+
+      // Check it’s from the right student to the right company
+      if (from === loan.studentAddress && to === loan.companyAddress) {
+        loan.amountPaidDrops = String(Number(loan.amountPaidDrops) + Number(amountDrops))
+        // Once fully repaid, mark REPAID
+        if (Number(loan.amountPaidDrops) >= Number(loan.totalOwedDrops)) {
+          loan.status = 'REPAID'
+        }
+        await loan.save()
+      }
+    })
+
+    // We leave the connection open so it keeps listening
+  } catch (err) {
+    console.error('Error in startPaymentListener:', err)
+  }
+}
+
+// Launch the payment listener once at startup
+startPaymentListener()
+
+// ---------------
+// 15. Route: Company prepares NFT burn (loan closed) once status === REPAID
+// GET /loan-agreements/:loanId/prepare-burn?companySeed=…
+app.get('/loan-agreements/:loanId/prepare-burn', async (req, res) => {
+  try {
+    const { loanId } = req.params
+    const { companySeed } = req.query
+
+    const loan = await LoanAgreement.findById(loanId)
+    if (!loan || loan.status !== 'REPAID' || !loan.nftTokenID) {
+      return res.status(400).json({ error: 'Loan not in REPAID state or missing NFT' })
+    }
+
+    const { txUnsignedJSON: burnJSON } = await prepareBurnNFT({
+      companySeed,
+      nftTokenID: loan.nftTokenID
+    })
+    return res.json({ burnJSON })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to prepare burn' })
+  }
+})
+
+// 16. Route: Company notifies backend that burn succeeded → set status = CLOSED
+// POST /loan-agreements/:loanId/record-burn
+app.post('/loan-agreements/:loanId/record-burn', async (req, res) => {
+  try {
+    const { loanId } = req.params
+
+    const loan = await LoanAgreement.findById(loanId)
+    if (!loan || loan.status !== 'REPAID') {
+      return res.status(400).json({ error: 'Loan not in REPAID state' })
+    }
+    loan.status = 'CLOSED'
+    await loan.save()
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to record burn' })
+  }
+})
+
+// ---------------
+// 17. Start the Express server
+const PORT = process.env.PORT || 3000
+app.listen(PORT, () => {
+  console.log(`🚀 Server listening on port ${PORT}`)
+})
