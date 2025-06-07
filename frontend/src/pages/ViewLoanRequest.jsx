@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import axios from 'axios';
 
 const ViewLoanRequest = () => {
   const { id } = useParams();
@@ -40,18 +41,17 @@ const ViewLoanRequest = () => {
     tAndC: '',
   });
   const [offerErrors, setOfferErrors] = useState({});
+  const [editMode, setEditMode] = useState(false);
+  const [formData, setFormData] = useState({});
 
   useEffect(() => {
     const fetchLoanRequest = async () => {
       try {
-        const response = await fetch(`/api/loan-requests/${id}`);
-        if (!response.ok) {
-          throw new Error('Failed to load loan request');
-        }
-        const data = await response.json();
-        setLoanRequest(data);
+        const res = await axios.get(`/api/loan-requests/${id}`);
+        setLoanRequest(res.data);
+        setFormData(res.data);
       } catch (err) {
-        setError(err.message || 'Failed to load loan request details');
+        setError('Failed to load loan request');
       } finally {
         setLoading(false);
       }
@@ -119,6 +119,16 @@ const ViewLoanRequest = () => {
     }
   };
 
+  const handleChange = (e) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSave = async () => {
+    // TODO: Implement PUT/PATCH to /api/loan-requests/:id
+    // await axios.put(`/api/loan-requests/${id}`, formData);
+    setEditMode(false);
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -144,7 +154,18 @@ const ViewLoanRequest = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="md" sx={{ py: 4 }}>
+      <Button
+        variant="outlined"
+        sx={{ mb: 2 }}
+        onClick={() => {
+          if (user?.role === 'student') navigate('/student/dashboard');
+          else if (user?.role === 'company') navigate('/company/dashboard');
+          else navigate('/');
+        }}
+      >
+        Back
+      </Button>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Loan Request Details
@@ -167,31 +188,33 @@ const ViewLoanRequest = () => {
                   <Typography variant="body2" color="text.secondary">
                     Student Name
                   </Typography>
-                  <Typography variant="body1">{loanRequest.student.name}</Typography>
+                  <Typography variant="body1">{loanRequest.studentName}</Typography>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Typography variant="body2" color="text.secondary">
                     School
                   </Typography>
-                  <Typography variant="body1">{loanRequest.student.school}</Typography>
+                  <TextField
+                    label="School"
+                    name="schoolAddress"
+                    value={formData.schoolAddress || ''}
+                    onChange={handleChange}
+                    disabled={!editMode}
+                    fullWidth
+                    margin="normal"
+                  />
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Typography variant="body2" color="text.secondary">
                     Program
                   </Typography>
-                  <Typography variant="body1">{loanRequest.student.program}</Typography>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <Typography variant="body2" color="text.secondary">
-                    Current Year
-                  </Typography>
-                  <Typography variant="body1">{loanRequest.student.currentYear}</Typography>
+                  <Typography variant="body1">{loanRequest.program}</Typography>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Typography variant="body2" color="text.secondary">
                     Graduation Date
                   </Typography>
-                  <Typography variant="body1">{loanRequest.student.graduationDate}</Typography>
+                  <Typography variant="body1">{loanRequest.graduationDate}</Typography>
                 </Grid>
               </Grid>
             </CardContent>
@@ -210,7 +233,9 @@ const ViewLoanRequest = () => {
                   <Typography variant="body2" color="text.secondary">
                     Total Amount Needed
                   </Typography>
-                  <Typography variant="body1">${loanRequest.financial.totalAmount}</Typography>
+                  <Typography variant="body1">
+                    ${Number(loanRequest.totalAmountDrops) / 1000000}
+                  </Typography>
                 </Grid>
                 <Grid item xs={12}>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -225,9 +250,9 @@ const ViewLoanRequest = () => {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {loanRequest.financial.feeSchedule.map((item, index) => (
+                        {loanRequest.feeSchedule.map((item, index) => (
                           <TableRow key={index}>
-                            <TableCell>${item.amount}</TableCell>
+                            <TableCell>${Number(item.amountDrops) / 1000000}</TableCell>
                             <TableCell>{item.dueDate}</TableCell>
                           </TableRow>
                         ))}
@@ -252,19 +277,13 @@ const ViewLoanRequest = () => {
                   <Typography variant="body2" color="text.secondary">
                     Industry
                   </Typography>
-                  <Typography variant="body1">{loanRequest.additional.industry}</Typography>
+                  <Typography variant="body1">{loanRequest.industry}</Typography>
                 </Grid>
-                <Grid item xs={12}>
+                <Grid item xs={12} md={8}>
                   <Typography variant="body2" color="text.secondary">
                     Description
                   </Typography>
-                  <Typography variant="body1">{loanRequest.additional.description}</Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="body2" color="text.secondary">
-                    Skills
-                  </Typography>
-                  <Typography variant="body1">{loanRequest.additional.skills}</Typography>
+                  <Typography variant="body1">{loanRequest.description}</Typography>
                 </Grid>
               </Grid>
             </CardContent>
@@ -384,6 +403,12 @@ const ViewLoanRequest = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {editMode ? (
+        <Button variant="contained" onClick={handleSave}>Save</Button>
+      ) : (
+        <Button variant="outlined" onClick={() => setEditMode(true)}>Edit</Button>
+      )}
     </Container>
   );
 };

@@ -4,6 +4,7 @@ import express from 'express'
 import mongoose from 'mongoose'
 import bodyParser from 'body-parser'
 import dotenv from 'dotenv'
+import cors from 'cors'
 import User from './models/User.js'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
@@ -31,6 +32,7 @@ import {
 import { pinJSONToIPFS } from './pinata.js'
 
 const app = express()
+app.use(cors())
 app.use(bodyParser.json()) // parse JSON bodies
 
 // 1. Connect to MongoDB
@@ -38,7 +40,10 @@ mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser:    true,
   useUnifiedTopology: true
 })
-  .then(() => console.log('✅ Connected to MongoDB'))
+  .then(async () => {
+    console.log('✅ Connected to MongoDB')
+    await seedDemoData()
+  })
   .catch(err => {
     console.error('❌ MongoDB connection error:', err)
     process.exit(1)
@@ -83,7 +88,7 @@ xrplClient.on('transaction', async (message) => {
 //    studentAddress, studentName, schoolAddress,
 //    program, totalAmountDrops, feeSchedule: [{ amountDrops, dueDate }], graduationDate, industry, description
 // }
-app.post('/loan-requests', async (req, res) => {
+app.post('/api/loan-requests', async (req, res) => {
   try {
     const {
       studentAddress,
@@ -94,7 +99,8 @@ app.post('/loan-requests', async (req, res) => {
       feeSchedule,
       graduationDate,
       industry,
-      description
+      description,
+      status
     } = req.body
 
     // Create a new LoanRequest document
@@ -107,7 +113,8 @@ app.post('/loan-requests', async (req, res) => {
       feeSchedule,
       graduationDate,
       industry,
-      description
+      description,
+      status: status || 'OPEN'
     })
     await newRequest.save()
 
@@ -136,6 +143,20 @@ app.get('/api/loan-requests', async (req, res) => {
   }
 })
 
+// Get a single loan request by ID
+app.get('/api/loan-requests/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const loanRequest = await LoanRequest.findById(id);
+    if (!loanRequest) {
+      return res.status(404).json({ error: 'Loan request not found' });
+    }
+    res.json(loanRequest);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch loan request' });
+  }
+});
+
 // ---------------
 // 4. Route: Company creates an Offer for a particular LoanRequest
 // POST /loan-requests/:requestId/offers
@@ -162,8 +183,8 @@ app.post('/api/loan-requests/:requestId/offers', async (req, res) => {
     await newOffer.save()
 
     // Mark the LoanRequest as UNDER_NEGOTIATION
-    loanReq.status = 'UNDER_NEGOTIATION'
-    await loanReq.save()
+    // loanReq.status = 'UNDER_NEGOTIATION'
+    // await loanReq.save()
 
     return res.status(201).json({ offerId: newOffer._id })
   } catch (err) {
@@ -185,6 +206,41 @@ app.get('/api/loan-requests/:requestId/offers', async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch offers' })
   }
 })
+
+// Get a single offer by ID
+app.get('/api/offers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const offer = await Offer.findById(id)
+      .populate({
+        path: 'companyAddress',
+        select: 'name industry location',
+        model: 'User',
+      })
+      .populate({
+        path: 'requestId',
+        populate: { path: 'studentAddress', select: 'name school program graduationYear', model: 'User' },
+      });
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+    res.json({ offer });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch offer' });
+  }
+});
+
+// Reject an offer
+app.post('/api/offers/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const offer = await Offer.findById(id);
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+    offer.status = 'REJECTED';
+    await offer.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to reject offer' });
+  }
+});
 
 // ---------------
 // 6. Route: Student accepts an Offer → create LoanAgreement + prepare NFT mint
@@ -244,6 +300,21 @@ app.post('/api/loan-requests/:requestId/accept-offer', async (req, res) => {
 
     loanReq.status = 'ACCEPTED'
     await loanReq.save()
+
+    // Mark all other pending offers for this request as EXPIRED
+    await Offer.updateMany(
+      { requestId, status: 'PENDING', _id: { $ne: offerId } },
+      { $set: { status: 'EXPIRED' } }
+    );
+
+    // If studentSeed is missing or not a string, skip NFT minting
+    if (!studentSeed || typeof studentSeed !== 'string') {
+      return res.json({
+        loanId: newLoan._id,
+        mintTxJSON: null,
+        message: 'Offer accepted and statuses updated. NFT minting not performed (no studentSeed provided).'
+      });
+    }
 
     // === NEW: Pin the loan metadata JSON to IPFS via Pinata ===
     // Build your metadata object:
@@ -682,7 +753,7 @@ app.get('/api/loan-agreements/:loanId', async (req, res) => {
 // Registration Route
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, school, program, graduationYear, industry, companySize, location } = req.body;
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
@@ -690,7 +761,14 @@ app.post('/api/auth/register', async (req, res) => {
     if (existing) {
       return res.status(400).json({ error: 'Email already registered.' });
     }
-    const user = new User({ name, email, password, role });
+    const user = new User({
+      name,
+      email,
+      password,
+      role,
+      // Only add these if present
+      ...(role === 'student' ? { school, program, graduationYear } : { industry, companySize, location })
+    });
     await user.save();
     // Create JWT
     const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET || 'devsecret', { expiresIn: '7d' });
@@ -720,4 +798,371 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get('/api/auth/validate', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret');
+    // Optionally, fetch user from DB to check if still exists
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+  } catch (err) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+});
+
+// Student Profile & Dashboard Endpoints
+app.get('/api/student/profile', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret');
+    if (decoded.role !== 'student') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    const user = await User.findById(decoded.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/student/loan-requests', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret');
+    if (decoded.role !== 'student') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    const requests = await LoanRequest.find({ studentAddress: decoded.id })
+      .sort({ createdAt: -1 });
+    res.json({ requests });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/student/offers', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret');
+    if (decoded.role !== 'student') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    // Get all loan requests by this student
+    const requests = await LoanRequest.find({ studentAddress: decoded.id });
+    const requestIds = requests.map(r => r._id);
+    // Get all offers for these requests
+    const offers = await Offer.find({ requestId: { $in: requestIds } })
+      .populate('companyAddress', 'name industry location')
+      .populate('requestId', 'schoolAddress program')
+      .sort({ createdAt: -1 });
+    res.json({ offers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/student/agreements', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret');
+    if (decoded.role !== 'student') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    const agreements = await LoanAgreement.find({ studentAddress: decoded.id })
+      .populate('companyAddress', 'name industry location')
+      .sort({ createdAt: -1 });
+    res.json({ agreements });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Company Profile & Dashboard Endpoints
+app.get('/api/company/profile', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret');
+    if (decoded.role !== 'company') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    const user = await User.findById(decoded.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/company/offers', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret');
+    if (decoded.role !== 'company') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    let offers = await Offer.find({ companyAddress: decoded.id })
+      .populate({
+        path: 'requestId',
+        populate: { path: 'studentAddress', select: 'name school program graduationYear' }
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+    offers = offers.map(o => {
+      if (o.requestId && typeof o.requestId.studentAddress === 'object' && o.requestId.studentAddress !== null && o.requestId.studentAddress.name) {
+        o.studentName = o.requestId.studentAddress.name;
+      } else if (o.requestId && o.requestId.studentName) {
+        o.requestId.studentAddress = { name: o.requestId.studentName };
+      }
+      return o;
+    });
+    res.json({ offers });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/company/agreements', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret');
+    if (decoded.role !== 'company') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    let agreements = await LoanAgreement.find({ companyAddress: decoded.id })
+      .populate('studentAddress', 'name school program graduationYear')
+      .populate('requestId', 'program schoolAddress')
+      .sort({ createdAt: -1 })
+      .lean();
+    // Fallback: if studentAddress is a string, fetch the user manually
+    for (let a of agreements) {
+      if (typeof a.studentAddress === 'string' && a.studentAddress.length === 24) {
+        const user = await User.findById(a.studentAddress).lean();
+        if (user) {
+          a.studentAddress = {
+            name: user.name,
+            school: user.school,
+            program: user.program,
+            graduationYear: user.graduationYear
+          };
+        }
+      }
+    }
+    agreements = agreements.map(a => {
+      if (typeof a.studentAddress === 'object' && a.studentAddress !== null && a.studentAddress.name) {
+        a.studentName = a.studentAddress.name;
+      } else if (a.studentName) {
+        a.studentAddress = { name: a.studentName };
+      }
+      return a;
+    });
+    res.json({ agreements });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all available loan requests for companies to view
+app.get('/api/company/available-requests', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'devsecret');
+    if (decoded.role !== 'company') {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    // Populate studentAddress as User
+    let requests = await LoanRequest.find({ status: 'OPEN' })
+      .populate('studentAddress', 'name school program graduationYear')
+      .sort({ createdAt: -1 })
+      .lean();
+    // Fallback: if studentAddress is not populated, use studentName
+    requests = requests.map(r => {
+      if (typeof r.studentAddress === 'object' && r.studentAddress !== null && r.studentAddress.name) {
+        r.studentName = r.studentAddress.name;
+      } else if (r.studentName) {
+        r.studentAddress = { name: r.studentName };
+      }
+      return r;
+    });
+    res.json({ requests });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- DEMO DATA SEEDING ---
+async function seedDemoData() {
+  // Demo student
+  const studentEmail = 'student@gmail.com';
+  const companyEmail = 'company@gmail.com';
+  const studentPassword = 'pass';
+  const companyPassword = 'pass';
+
+  // 1. Create demo student if not exists
+  let student = await User.findOne({ email: studentEmail });
+  if (!student) {
+    student = new User({
+      name: 'Demo Student',
+      email: studentEmail,
+      password: studentPassword,
+      role: 'student',
+      school: 'NUS',
+      program: 'Information Systems',
+      graduationYear: '2025',
+    });
+    await student.save();
+    console.log('✅ Demo student created');
+  }
+
+  // 2. Create demo company if not exists
+  let company = await User.findOne({ email: companyEmail });
+  if (!company) {
+    company = new User({
+      name: 'MicroHard',
+      email: companyEmail,
+      password: companyPassword,
+      role: 'company',
+      industry: 'Technology',
+      companySize: '51-200',
+      location: 'Singapore',
+    });
+    await company.save();
+    console.log('✅ Demo company created');
+  }
+
+  // 3. Create a demo loan request for the student if not exists
+  let loanRequest = await LoanRequest.findOne({ studentAddress: student._id });
+  if (!loanRequest) {
+    loanRequest = new LoanRequest({
+      studentAddress: student._id,
+      studentName: student.name,
+      schoolAddress: 'NUS',
+      program: 'Information Systems',
+      totalAmountDrops: '5000',
+      feeSchedule: [
+        { amountDrops: '2500', dueDate: new Date('2025-01-01') },
+        { amountDrops: '2500', dueDate: new Date('2025-06-01') },
+      ],
+      graduationDate: new Date('2025-06-01'),
+      industry: 'Technology',
+      description: 'Funding for final year tuition',
+      status: 'OPEN',
+    });
+    await loanRequest.save();
+    console.log('✅ Demo loan request created');
+  }
+
+  // 4. Create a demo offer from the company to the student's loan request if not exists
+  let offer = await Offer.findOne({ requestId: loanRequest._id, companyAddress: company._id });
+  if (!offer) {
+    offer = new Offer({
+      requestId: loanRequest._id,
+      companyAddress: company._id,
+      interestRate: 0.05,
+      workObligationYears: 2,
+      tAndC_URI: 'Demo T&C',
+      status: 'PENDING',
+    });
+    await offer.save();
+    console.log('✅ Demo offer created');
+  }
+}
+
+app.put('/api/loan-requests/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await LoanRequest.findByIdAndUpdate(id, req.body, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update loan request' });
+  }
+});
+
+app.delete('/api/loan-requests/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await LoanRequest.findByIdAndDelete(id);
+    if (!deleted) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete loan request' });
+  }
+});
+
+app.delete('/api/offers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Offer.findByIdAndDelete(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete offer' });
+  }
+});
+
+app.get('/api/loan-agreements/:id', async (req, res) => {
+  let agreement = await LoanAgreement.findById(req.params.id)
+    .populate('companyAddress', 'name industry location')
+    .populate('studentAddress', 'name school program graduationYear')
+    .populate('requestId', 'program schoolAddress')
+    .lean();
+  if (!agreement) return res.status(404).json({ error: 'Not found' });
+  // Fallback: if studentAddress is a string, fetch the user manually
+  if (typeof agreement.studentAddress === 'string' && agreement.studentAddress.length === 24) {
+    const user = await User.findById(agreement.studentAddress).lean();
+    if (user) {
+      agreement.studentAddress = {
+        name: user.name,
+        school: user.school,
+        program: user.program,
+        graduationYear: user.graduationYear
+      };
+    }
+  }
+  res.json({ agreement });
 });

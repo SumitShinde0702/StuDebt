@@ -33,16 +33,13 @@ const Login = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
-    try {
-      await login(formData.email, formData.password);
-      // Navigate to appropriate dashboard based on user role
-      navigate('/dashboard');
-    } catch (err) {
-      setError(err.message || 'Failed to login. Please check your credentials.');
-    } finally {
-      setLoading(false);
+    const result = await login(formData.email, formData.password);
+    setLoading(false);
+    if (!result.success) {
+      setError(result.error);
+      // Do NOT navigate anywhere
     }
+    // If success, AuthContext will handle navigation
   };
 
   return (
