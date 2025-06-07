@@ -1,0 +1,98 @@
+frontend/src/
+├── components/
+│   ├── auth/
+│   │   ├── Login.jsx
+│   │   ├── Register.jsx
+│   │   ├── WalletConnect.jsx
+│   │   └── AuthLayout.jsx
+│   ├── student/
+│   │   ├── LoanRequestWizard/
+│   │   │   ├── Step1BasicInfo.jsx
+│   │   │   ├── Step2FinancialDetails.jsx
+│   │   │   ├── Step3AdditionalInfo.jsx
+│   │   │   ├── Step4Documents.jsx
+│   │   │   ├── Step5Review.jsx
+│   │   │   └── index.jsx
+│   │   ├── Dashboard.jsx
+│   │   ├── Profile.jsx
+│   │   └── Applications.jsx
+│   ├── company/
+│   │   ├── Dashboard/
+│   │   │   ├── ActiveSponsorships.jsx
+│   │   │   ├── PendingOffers.jsx
+│   │   │   ├── AvailableRequests.jsx
+│   │   │   └── index.jsx
+│   │   ├── Profile.jsx
+│   │   └── CreateOffer.jsx
+│   ├── common/
+│   │   ├── Navbar.jsx
+│   │   ├── Footer.jsx
+│   │   ├── Loading.jsx
+│   │   ├── ErrorBoundary.jsx
+│   │   └── NotificationCenter.jsx
+│   └── layout/
+│       ├── MainLayout.jsx
+│       └── AuthLayout.jsx
+├── pages/
+│   ├── Landing.jsx
+│   ├── Login.jsx
+│   ├── Register.jsx
+│   ├── StudentDashboard.jsx
+│   ├── CompanyDashboard.jsx
+│   ├── CreateLoanRequest.jsx
+│   ├── ViewLoanRequest.jsx
+│   ├── Profile.jsx
+│   └── NotFound.jsx
+├── hooks/
+│   ├── useAuth.js
+│   ├── useWallet.js
+│   ├── useNotifications.js
+│   └── useLoanRequest.js
+├── services/
+│   ├── api.js
+│   ├── xrpl.js
+│   └── xumm.js
+├── context/
+│   ├── AuthContext.jsx
+│   ├── WalletContext.jsx
+│   └── NotificationContext.jsx
+├── utils/
+│   ├── validation.js
+│   ├── formatters.js
+│   └── constants.js
+├── styles/
+│   ├── theme.js
+│   └── global.css
+├── App.jsx
+├── main.jsx
+└── vite-env.d.ts
+
+Key Features to Implement:
+1. Authentication & Authorization
+   - Email/password login
+   - XUMM wallet connection
+   - Role-based access
+
+2. Student Features
+   - Loan request wizard
+   - Profile management
+   - Document upload
+   - Application tracking
+
+3. Company Features
+   - Tabbed dashboard
+   - Offer creation
+   - Sponsorship management
+   - Profile management
+
+4. Common Features
+   - Notification system
+   - Document preview
+   - Demo mode
+   - Responsive design
+
+5. Integration Points
+   - XRPL escrow system
+   - XUMM wallet
+   - Backend API
+   - MongoDB 

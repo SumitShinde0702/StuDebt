@@ -1,0 +1,324 @@
+# StuDebt Platform Requirements
+
+## Core Features
+- Student loan request and management
+- Company sponsorship and offer management
+- XRPL escrow-based payment system
+- XUMM wallet integration
+- Role-based access (Student, Company)
+
+## Authentication
+- Email/password login
+- XUMM wallet connection (optional)
+- Role-based access control
+
+## Company Profile
+- Basic Information:
+  - Company name
+  - Industry
+  - Company size
+  - Location
+  - Description
+- Documents:
+  - Business licenses
+  - Certifications
+  - Other relevant documents
+- Rating system based on work conditions
+
+## Student Profile
+- Basic Information:
+  - Name
+  - Education history
+  - Current school
+  - Skills
+  - Industry preferences
+- Documents:
+  - Academic records
+  - Identification
+  - Other relevant documents
+
+## Loan Request Flow
+1. Student creates loan request with:
+   - School details
+   - Program details
+   - Amount needed
+   - Fee schedule
+   - Graduation date
+   - Industry preference
+   - Description
+
+2. Company Offer Flow:
+   - View available loan requests
+   - Filter by industry
+   - Create offer with:
+     - Interest rate
+     - Work obligation years
+     - Terms and conditions
+   - Student can accept or counter
+
+3. After Acceptance:
+   - NFT creation
+   - Escrow setup for payments
+   - Automatic school payments
+
+## Demo Mode Features
+- Test accounts for both roles
+- Sample loan requests
+- Sample company profiles
+- Test XRPL transactions
+- Demo wallet integration
+
+## UI/UX Requirements
+- Single Page Application (React + Vite)
+- Mobile responsive
+- Intuitive navigation
+- Clear role-based interfaces
+- Step-by-step guides
+- Visual payment tracking
+- Document upload interface
+- Rating system interface
+
+## Dashboard Layout
+### Student Dashboard
+- Simple overview of active applications
+- Company details only visible on click
+- Draft requests saved in 'Ongoing Applications'
+- No direct display of payment schedules or offers on main dashboard
+
+### Company Dashboard
+- Active sponsorships overview
+- Pending offers list
+- Available loan requests
+- Quick filters for loan requests
+
+## Document Management
+- Optional document preview feature
+- Basic verification status indicators (MVP: simulated verification)
+- No file type/size restrictions for MVP
+- Document upload interface for:
+  - Business licenses
+  - Academic records
+  - Identification documents
+  - Other relevant documents
+
+## Loan Request Interface
+- Wizard-style form for step-by-step request creation
+- Optional interest rate and payment schedule calculator
+- Draft saving functionality
+- 'Ongoing Applications' section for saved drafts
+- Form sections:
+  - School details
+  - Program details
+  - Amount needed
+  - Fee schedule
+  - Graduation date
+  - Industry preference
+  - Description
+
+## Company Search/Filter
+- Basic filters:
+  - Industry
+  - Location
+  - Company size
+- No map view required
+- No advanced search needed
+
+## Notification System
+- In-app notifications for:
+  - New offers
+  - Payment due
+  - Escrow release
+  - Other important updates
+- Notification preferences in settings
+- No email notifications for MVP
+- No real-time updates required
+
+## Mobile Experience
+- Responsive design only
+- No mobile-specific features
+- No simplified mobile interface
+- QR code support for XUMM wallet connection (using built-in functionality)
+
+## Demo Mode
+- "Try Demo" button on landing page
+- Sample data for all features
+- No guided tour required
+- Test accounts for both roles
+- Sample loan requests
+- Sample company profiles
+- Test XRPL transactions
+- Demo wallet integration
+
+## Accessibility
+- Basic responsive design
+- No specific accessibility features required
+- No multi-language support
+- No high-contrast mode
+
+## Technical Stack
+- Frontend: React + Vite
+- UI Components: @mui/material
+- Routing: react-router-dom
+- State Management: @tanstack/react-query
+- XUMM Integration: @xumm/sdk
+- Styling: @emotion/styled
+- Forms: formik + yup
+- Backend: Node.js + Express
+- Database: MongoDB
+- Blockchain: XRPL
+- Wallet: XUMM
+
+## Project Structure
+src/
+├── components/
+│   ├── auth/           # Login, registration, wallet connection
+│   ├── student/        # Student-specific components
+│   ├── company/        # Company-specific components
+│   ├── common/         # Shared components
+│   └── layout/         # Layout components
+├── pages/              # Page components
+├── hooks/              # Custom React hooks
+├── services/           # API calls and XRPL integration
+├── context/            # React context for state management
+├── utils/              # Helper functions
+└── styles/             # Global styles and themes
+
+## Impact Areas
+1. Financial Inclusion:
+   - Direct student-company connection
+   - No traditional banking requirements
+   - Transparent funding process
+
+2. Transparency:
+   - Blockchain-based transaction records
+   - Escrow system for fund security
+   - Clear terms and conditions
+   - Automated payment system
+
+3. Real-World Impact:
+   - Reduced administrative overhead
+   - Lower education access barriers
+   - Transparent fund tracking
+   - Automated compliance
+
+4. User Accessibility:
+   - Simple authentication
+   - Clear role-based interfaces
+   - Mobile responsive design
+   - Step-by-step guides
+
+## Implementation Details
+
+### Demo Mode Implementation
+- Use flag in existing collections to mark demo entries
+- Auto-create demo data when user clicks "Try Demo"
+- Demo data includes:
+  - Sample student profiles
+  - Sample company profiles
+  - Sample loan requests
+  - Sample offers
+  - Test XRPL transactions
+- Demo data marked with `isDemo: true` flag
+- Demo accounts created on-demand
+
+### Loan Request Wizard
+1. Step 1: Basic Information
+   - School details
+   - Program details
+   - Current year/level
+
+2. Step 2: Financial Details
+   - Total amount needed
+   - Fee schedule input
+   - Payment calculator (optional)
+
+3. Step 3: Additional Information
+   - Graduation date
+   - Industry preference
+   - Description
+   - Skills
+
+4. Step 4: Document Upload
+   - Academic records
+   - Identification
+   - Other relevant documents
+   - Document preview (optional)
+
+5. Step 5: Review & Submit
+   - Summary of all information
+   - Document verification status
+   - Submit or save as draft
+
+### Company Dashboard
+- Tabbed interface with:
+  1. Active Sponsorships Tab
+     - List of current sponsorships
+     - Payment status
+     - Student details
+     - Escrow status
+
+  2. Pending Offers Tab
+     - List of sent offers
+     - Student responses
+     - Offer status
+     - Action buttons
+
+  3. Available Requests Tab
+     - List of student loan requests
+     - Filter options
+     - Quick action buttons
+     - Request details
+
+- Each tab includes:
+  - Search functionality
+  - Basic filters
+  - Sort options
+  - Pagination 
+
+## Landing Page Features
+- Hero Section:
+  - Clear value proposition
+  - "Try Demo" button
+  - Brief platform description
+- Statistics Section:
+  - Total loans funded
+  - Active sponsorships
+  - Number of students helped
+  - Number of companies participating
+- Features Section:
+  - How it works (step-by-step)
+  - Key benefits for students
+  - Key benefits for companies
+  - XRPL integration highlights
+- Testimonials Section:
+  - Student success stories
+  - Company success stories
+  - Impact metrics
+- Call to Action:
+  - Register as Student
+  - Register as Company
+  - Learn More
+
+## Authentication Implementation
+- Simple email/password login
+- No email verification required
+- No social login integration
+- No password reset functionality
+- Role selection during registration (Student/Company)
+- XUMM wallet connection (optional, post-login)
+- Session management with JWT
+
+## Demo Mode Implementation
+- Integrated into main application flow
+- Demo toggle in user profile/settings
+- Demo data marked with `isDemo: true` flag
+- Features:
+  - Sample student profile
+  - Sample company profile
+  - Sample loan requests
+  - Sample offers
+  - Test XRPL transactions
+  - Demo wallet integration
+- Demo data created on-demand when user enables demo mode
+- Clear visual indicators for demo mode
+- Easy switch between demo and real mode 
