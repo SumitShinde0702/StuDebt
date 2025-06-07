@@ -17,7 +17,10 @@ import CompanyDashboard from './pages/CompanyDashboard';
 import Profile from './pages/Profile';
 import CreateLoanRequest from './pages/CreateLoanRequest';
 import ViewLoanRequest from './pages/ViewLoanRequest';
+import Applications from './pages/Applications';
+import Sponsorships from './pages/Sponsorships';
 import NotFound from './pages/NotFound';
+import MakeOffer from './pages/MakeOffer';
 
 // Create a client for React Query
 const queryClient = new QueryClient();
@@ -60,10 +63,26 @@ const App = () => {
                 }
               />
               <Route
+                path="/student/create-request/:id"
+                element={
+                  <ProtectedRoute roles={['student']}>
+                    <CreateLoanRequest />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/student/create-request"
                 element={
                   <ProtectedRoute roles={['student']}>
                     <CreateLoanRequest />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/applications"
+                element={
+                  <ProtectedRoute roles={['student']}>
+                    <Applications />
                   </ProtectedRoute>
                 }
               />
@@ -74,6 +93,14 @@ const App = () => {
                 element={
                   <ProtectedRoute roles={['company']}>
                     <CompanyDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sponsorships"
+                element={
+                  <ProtectedRoute roles={['company']}>
+                    <Sponsorships />
                   </ProtectedRoute>
                 }
               />
@@ -92,6 +119,14 @@ const App = () => {
                 element={
                   <ProtectedRoute>
                     <ViewLoanRequest />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/loan-requests/:id/make-offer"
+                element={
+                  <ProtectedRoute roles={['company']}>
+                    <MakeOffer />
                   </ProtectedRoute>
                 }
               />

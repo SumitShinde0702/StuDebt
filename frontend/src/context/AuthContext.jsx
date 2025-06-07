@@ -39,12 +39,16 @@ export const AuthProvider = ({ children }) => {
       const { token, user } = response.data;
       localStorage.setItem('token', token);
       setUser(user);
-      navigate(user.role === 'student' ? '/student/dashboard' : '/company/dashboard');
+      if (user.role === 'student') {
+        navigate('/student/dashboard');
+      } else if (user.role === 'company') {
+        navigate('/company/dashboard');
+      }
       return { success: true };
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'Login failed'
+        error: error.response?.data?.error || 'Login failed'
       };
     }
   };
@@ -55,12 +59,16 @@ export const AuthProvider = ({ children }) => {
       const { token, user } = response.data;
       localStorage.setItem('token', token);
       setUser(user);
-      navigate(user.role === 'student' ? '/student/dashboard' : '/company/dashboard');
+      if (user.role === 'student') {
+        navigate('/student/dashboard');
+      } else if (user.role === 'company') {
+        navigate('/company/dashboard');
+      }
       return { success: true };
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || 'Registration failed'
+        error: error.response?.data?.error || 'Registration failed'
       };
     }
   };

@@ -6,6 +6,14 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['student', 'company'], required: true },
+  // Student fields
+  school: String,
+  program: String,
+  graduationYear: String,
+  // Company fields
+  industry: String,
+  companySize: String,
+  location: String,
   // Add other fields as needed
 });
 

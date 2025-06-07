@@ -65,7 +65,11 @@ const MainLayout = ({ children }) => {
   };
 
   const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+    {
+      text: 'Dashboard',
+      icon: <DashboardIcon />,
+      path: user?.role === 'student' ? '/student/dashboard' : '/company/dashboard'
+    },
     { text: 'Profile', icon: <PersonIcon />, path: '/profile' },
     ...(user?.role === 'student' ? [
       { text: 'My Applications', icon: <SchoolIcon />, path: '/applications' },

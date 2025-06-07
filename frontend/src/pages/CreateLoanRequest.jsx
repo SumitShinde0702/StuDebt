@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -27,8 +27,9 @@ import {
   Delete as DeleteIcon,
   Save as SaveIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { studentApi } from '../services/api';
 
 const steps = [
   'Basic Information',
@@ -51,6 +52,7 @@ const industries = [
 const CreateLoanRequest = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { id } = useParams();
   const [activeStep, setActiveStep] = useState(0);
   const [formData, setFormData] = useState({
     // Step 1: Basic Information
@@ -68,6 +70,34 @@ const CreateLoanRequest = () => {
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      // Fetch the draft loan request and pre-fill the form
+      (async () => {
+        try {
+          const res = await studentApi.getLoanRequestById(id);
+          const draft = res.data;
+          setFormData({
+            school: draft.schoolAddress || '',
+            program: draft.program || '',
+            currentYear: '', // Not stored, so leave blank or parse from description if needed
+            totalAmount: draft.totalAmountDrops ? Number(draft.totalAmountDrops) / 1000000 : '',
+            feeSchedule: draft.feeSchedule?.map(item => ({
+              amount: item.amountDrops ? Number(item.amountDrops) / 1000000 : '',
+              dueDate: item.dueDate ? item.dueDate.slice(0, 10) : '',
+            })) || [{ amount: '', dueDate: '' }],
+            graduationDate: draft.graduationDate ? draft.graduationDate.slice(0, 10) : '',
+            industry: draft.industry || '',
+            description: draft.description || '',
+            skills: '', // Not stored, so leave blank or parse from description if needed
+          });
+        } catch (err) {
+          // Could not load draft, ignore
+        }
+      })();
+    }
+  }, [id]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -147,13 +177,67 @@ const CreateLoanRequest = () => {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // TODO: Implement API call to create loan request
-      console.log('Submitting loan request:', formData);
-      // Navigate to dashboard on success
-      navigate('/dashboard');
+      const payload = {
+        studentAddress: user.id || user._id,
+        studentName: user.name,
+        schoolAddress: formData.school,
+        program: formData.program,
+        totalAmountDrops: String(Number(formData.totalAmount) * 1000000),
+        feeSchedule: formData.feeSchedule.map(item => ({
+          amountDrops: String(Number(item.amount) * 1000000),
+          dueDate: item.dueDate,
+        })),
+        graduationDate: formData.graduationDate,
+        industry: formData.industry,
+        description: `${formData.description}\n\nCurrent Year: ${formData.currentYear}\nSkills: ${formData.skills}`,
+      };
+      if (id) {
+        // If editing a draft, update it
+        await studentApi.updateLoanRequest(id, payload);
+      } else {
+        await studentApi.createLoanRequest(payload);
+      }
+      navigate('/student/dashboard');
     } catch (error) {
       console.error('Error creating loan request:', error);
       setErrors(prev => ({ ...prev, submit: 'Failed to create loan request' }));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setIsSubmitting(true);
+    try {
+      // Only include valid feeSchedule items for drafts
+      const validFeeSchedule = formData.feeSchedule.filter(
+        item => item.amount && item.dueDate
+      ).map(item => ({
+        amountDrops: String(Number(item.amount) * 1000000),
+        dueDate: item.dueDate,
+      }));
+
+      const payload = {
+        studentAddress: user.id || user._id,
+        studentName: user.name,
+        schoolAddress: formData.school,
+        program: formData.program,
+        totalAmountDrops: String(Number(formData.totalAmount) * 1000000),
+        feeSchedule: validFeeSchedule, // Only valid items or []
+        graduationDate: formData.graduationDate,
+        industry: formData.industry,
+        description: `${formData.description}\n\nCurrent Year: ${formData.currentYear}\nSkills: ${formData.skills}`,
+        status: 'DRAFT',
+      };
+
+      if (id) {
+        await studentApi.updateLoanRequest(id, payload);
+      } else {
+        await studentApi.createLoanRequest(payload);
+      }
+      navigate('/student/dashboard');
+    } catch (error) {
+      alert('Failed to save draft.');
     } finally {
       setIsSubmitting(false);
     }
@@ -518,7 +602,7 @@ const CreateLoanRequest = () => {
               <Button
                 variant="outlined"
                 startIcon={<SaveIcon />}
-                onClick={() => navigate('/dashboard')}
+                onClick={handleSaveDraft}
                 sx={{ mr: 1 }}
               >
                 Save as Draft

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -50,17 +50,35 @@ const Profile = () => {
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
-    // Additional fields based on role
     ...(user?.role === 'student' ? {
-      school: '',
-      program: '',
-      graduationDate: '',
+      school: user?.school || '',
+      program: user?.program || '',
+      graduationYear: user?.graduationYear || '',
     } : {
-      companyName: '',
-      industry: '',
-      location: '',
+      companyName: user?.name || '',
+      industry: user?.industry || '',
+      location: user?.location || '',
     }),
   });
+
+  useEffect(() => {
+    if (!user) return;
+    setFormData({
+      name: user.name || '',
+      email: user.email || '',
+      ...(user.role === 'student'
+        ? {
+            school: user.school || '',
+            program: user.program || '',
+            graduationYear: user.graduationYear || '',
+          }
+        : {
+            companyName: user.name || '',
+            industry: user.industry || '',
+            location: user.location || '',
+          }),
+    });
+  }, [user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -108,13 +126,12 @@ const Profile = () => {
       <Grid item xs={12} md={6}>
         <TextField
           fullWidth
-          label="Graduation Date"
-          name="graduationDate"
-          type="date"
-          value={formData.graduationDate}
+          label="Graduation Year"
+          name="graduationYear"
+          type="number"
+          value={formData.graduationYear}
           onChange={handleChange}
           disabled={!isEditing}
-          InputLabelProps={{ shrink: true }}
         />
       </Grid>
     </>
