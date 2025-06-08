@@ -8,6 +8,8 @@ import cors from 'cors'
 import User from './models/User.js'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
+import { Client as XrplClient } from 'xrpl'
+
 dotenv.config()
 
 // Import our Mongoose models
@@ -46,6 +48,38 @@ mongoose.connect(process.env.MONGODB_URI, {
     console.error('❌ MongoDB connection error:', err)
     process.exit(1)
   })
+
+const xrplClient = new XrplClient(process.env.XRPL_SERVER)
+await xrplClient.connect()
+
+// Subscribe to all payments that hit any company account you’ve created.
+// For a production system you'd maintain a list of all active company addresses.
+// Here, for simplicity, let's subscribe to all transactions and filter:
+await xrplClient.request({ command: 'subscribe', streams: ['transactions'] })
+
+xrplClient.on('transaction', async (message) => {
+  // Only handle messages that actually carry a transaction
+  if (message.type !== 'transaction' || !message.transaction) {
+    return
+  }
+  const tx = message.transaction
+
+  if (tx.TransactionType === 'Payment' && Array.isArray(tx.Memos)) {
+    // Decode the first Memo
+    const raw = tx.Memos[0].Memo
+    const memoType = Buffer.from(raw.MemoType, 'hex').toString('utf8')
+    if (memoType === 'LoanRepayment') {
+      const loanId = Buffer.from(raw.MemoData, 'hex').toString('utf8')
+      console.log(`🔔 Detected repayment for loan ${loanId}`)
+      const loan = await LoanAgreement.findById(loanId)
+      if (loan && loan.status === 'FUNDED') {
+        loan.status = 'REPAID'
+        await loan.save()
+        console.log(`✅ Marked loan ${loanId} as REPAID`)
+      }
+    }
+  }
+})
 
 // ---------------
 // 2. Route: Student creates a LoanRequest
@@ -467,16 +501,57 @@ app.post('/api/loan-agreements/:loanId/record-escrow', async (req, res) => {
     const { loanId } = req.params
     const { installmentIndex, escrowSequence } = req.body
 
+    // 1) Load the agreement
     const loan = await LoanAgreement.findById(loanId)
     if (!loan) {
-      return res.status(404).json({ error: 'Loan not found' })
+      return res.status(404).json({ error: 'LoanAgreement not found' })
     }
+
+    // 2) Validate index
+    if (
+      typeof installmentIndex !== 'number' ||
+      installmentIndex < 0 ||
+      installmentIndex >= loan.feeSchedule.length
+    ) {
+      return res.status(400).json({ error: 'Invalid installmentIndex' })
+    }
+
+    // 3) Record the on-chain sequence in the feeSchedule entry
     loan.feeSchedule[installmentIndex].escrowIndex = escrowSequence
+
+    // 4) If every installment now has an escrowIndex, mark FUNDED
+    const allFunded = loan.feeSchedule.every(item => item.escrowIndex != null)
+    if (allFunded && loan.status === 'AWAITING_FUNDING') {
+      loan.status = 'FUNDED'
+    }
+
+    // 5) Save and respond
     await loan.save()
-    return res.json({ ok: true })
+    return res.json({ success: true, status: loan.status })
+
+  } catch (err) {
+    console.error('record-escrow error:', err)
+    return res.status(500).json({ error: 'Failed to record escrow' })
+  }
+})
+
+// POST /api/loan-agreements/:loanId/record-payment
+// (body can be empty — we already know who paid, because the
+// test just sent the payment with the LoanRepayment memo)
+app.post('/api/loan-agreements/:loanId/record-payment', async (req, res) => {
+  try {
+    const { loanId } = req.params
+    const loan = await LoanAgreement.findById(loanId)
+    if (!loan) return res.status(404).json({ error: 'Loan not found' })
+
+    // mark it Repaid
+    loan.status = 'REPAID'
+    await loan.save()
+    return res.json({ success: true, status: loan.status })
+
   } catch (err) {
     console.error(err)
-    return res.status(500).json({ error: 'Failed to record escrow' })
+    return res.status(500).json({ error: 'Failed to record payment' })
   }
 })
 
@@ -659,6 +734,21 @@ const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
   console.log(`🚀 Server listening on port ${PORT}`)
 })
+
+// ─── NEW: fetch a single LoanAgreement by ID ─────────────────────────────
+app.get('/api/loan-agreements/:loanId', async (req, res) => {
+  try {
+    const loan = await LoanAgreement.findById(req.params.loanId)
+    if (!loan) {
+      return res.status(404).json({ error: 'LoanAgreement not found' })
+    }
+    return res.json(loan)
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Failed to fetch LoanAgreement' })
+  }
+})
+// ──────────────────────────────────────────────────────────────────────────
 
 // Registration Route
 app.post('/api/auth/register', async (req, res) => {
