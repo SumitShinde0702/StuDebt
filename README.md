@@ -54,6 +54,11 @@ XFund is a next-generation platform that connects students seeking educational f
    ```
 6. **Access the app:**
    - Open [http://localhost:5173](http://localhost:5173) in your browser.
+  
+## Video
+#This is a canva link to our video. The size was too big to be uploaded to GitHub :/
+
+https://www.canva.com/design/DAGpuyYabqM/afDS1JZjtxU9NLAT2uAZJA/edit?utm_content=DAGpuyYabqM&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
 
 ## 📸 Screenshots
 ![image](https://github.com/user-attachments/assets/1fd46e29-817a-488d-b859-562506482132)
