@@ -31,25 +31,25 @@ const CompanyDashboard = () => {
   const [offers, setOffers] = useState([]);
   const [availableRequests, setAvailableRequests] = useState([]);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        const [agreementsRes, offersRes, requestsRes] = await Promise.all([
-          companyApi.getAgreements(),
-          companyApi.getOffers(),
-          companyApi.getAvailableRequests(),
-        ]);
-        setAgreements(agreementsRes.data.agreements);
-        setOffers(offersRes.data.offers);
-        setAvailableRequests(requestsRes.data.requests);
-      } catch (err) {
-        setError(err.response?.data?.error || 'Failed to load dashboard data');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const [agreementsRes, offersRes, requestsRes] = await Promise.all([
+        companyApi.getAgreements(),
+        companyApi.getOffers(),
+        companyApi.getAvailableRequests(),
+      ]);
+      setAgreements(agreementsRes.data.agreements);
+      setOffers(offersRes.data.offers);
+      setAvailableRequests(requestsRes.data.requests);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchDashboardData();
   }, []);
 
@@ -99,6 +99,10 @@ const CompanyDashboard = () => {
           Manage your sponsorships and view available loan requests
         </Typography>
       </Box>
+
+      <Button onClick={fetchDashboardData} variant="outlined" sx={{ mb: 2 }}>
+        Refresh
+      </Button>
 
       <Grid container spacing={4}>
         {/* Active Sponsorships Section */}
@@ -195,6 +199,23 @@ const CompanyDashboard = () => {
                           >
                             View Details
                           </Button>
+                          {offer.status === 'PENDING' && (
+                            <Button
+                              size="small"
+                              color="error"
+                              onClick={async () => {
+                                if (window.confirm('Delete this pending offer?')) {
+                                  await companyApi.deleteOffer(offer._id);
+                                  // Remove from UI
+                                  const newOffers = offers.filter(o => o._id !== offer._id);
+                                  setOffers(newOffers);
+                                }
+                              }}
+                              sx={{ ml: 1 }}
+                            >
+                              Delete
+                            </Button>
+                          )}
                           {offer.status === 'REJECTED' && (
                             <>
                               <Chip label="Rejected" color="error" size="small" sx={{ mr: 1 }} />

@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }) => {
       } else if (user.role === 'company') {
         navigate('/company/dashboard');
       }
-      return { success: true };
+      return user;
     } catch (error) {
       return {
         success: false,

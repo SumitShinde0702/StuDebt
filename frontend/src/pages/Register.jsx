@@ -82,9 +82,15 @@ const Register = () => {
         }),
       };
 
-      await register(registrationData);
+      const user = await register(registrationData);
       // Navigate to appropriate dashboard based on role
-      navigate('/dashboard');
+      if (user.role === 'company') {
+        navigate('/company/dashboard');
+      } else if (user.role === 'student') {
+        navigate('/student/dashboard');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       setError(err.message || 'Failed to register. Please try again.');
     } finally {
