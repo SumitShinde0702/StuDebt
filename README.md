@@ -27,6 +27,8 @@ XFund is a next-generation platform that connects students seeking educational f
 - **Blockchain:** XRPL (XRP Ledger), NFT & Escrow integration
 - **Authentication:** JWT-based, role-aware
 
+- 
+
 ## ⚡ Quick Start
 
 1. **Clone the repository:**
@@ -54,8 +56,8 @@ XFund is a next-generation platform that connects students seeking educational f
    - Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ## 📸 Screenshots
+![image](https://github.com/user-attachments/assets/b736422f-fa09-4365-b8ce-4dbddc96d7fe)
 
-> _Coming Soon_
 
 ## 🤝 Contributing
 
