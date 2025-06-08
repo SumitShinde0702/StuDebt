@@ -1,14 +1,14 @@
-# StuDebt
+# StuDebt (now known as XFund)
 
 Empowering Students. Connecting Companies. Funding Futures.
 
 ---
 
-StuDebt is a next-generation platform that connects students seeking educational funding with companies willing to sponsor their education in exchange for future work commitments. By leveraging blockchain technology (XRPL) and a transparent offer system, StuDebt creates a win-win ecosystem for students and companies alike.
+XFund is a next-generation platform that connects students seeking educational funding with companies willing to sponsor their education in exchange for future work commitments. By leveraging blockchain technology (XRPL) and a transparent offer system, XFund creates a win-win ecosystem for students and companies alike.
 
 ## 🚀 Project Overview
 
-**StuDebt** enables students to create loan requests for their education, and companies to make sponsorship offers. Students can review, accept, or reject offers, and once an agreement is reached, the process is managed transparently on-chain using XRPL escrow and NFT technology.
+**XFund** enables students to create loan requests for their education, and companies to make sponsorship offers. Students can review, accept, or reject offers, and once an agreement is reached, the process is managed transparently on-chain using XRPL escrow and NFT technology.
 
 ## 🌟 Key Features
 
@@ -55,11 +55,11 @@ StuDebt is a next-generation platform that connects students seeking educational
 
 ## 📸 Screenshots
 
-> _Add screenshots or GIFs here to showcase the UI and main flows!_
+> _Coming Soon_
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please open issues or submit pull requests to help improve StuDebt.
+Contributions are welcome! Please open issues or submit pull requests to help improve Xfund.
 
 ## 📄 License
 
@@ -67,4 +67,4 @@ MIT License
 
 ---
 
-**StuDebt** — Funding education, building futures, powered by blockchain.
+**XFund** — Funding education, building futures, powered by blockchain.
