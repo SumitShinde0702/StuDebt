@@ -56,7 +56,18 @@ XFund is a next-generation platform that connects students seeking educational f
    - Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ## 📸 Screenshots
-![image](https://github.com/user-attachments/assets/b736422f-fa09-4365-b8ce-4dbddc96d7fe)
+![image](https://github.com/user-attachments/assets/1fd46e29-817a-488d-b859-562506482132)
+![image](https://github.com/user-attachments/assets/788c46b6-a20d-4d69-9ccd-6ad3cf99174e)
+
+![image](https://github.com/user-attachments/assets/bc7684aa-1d9c-4127-99ee-f31e2d99bf9b)
+![image](https://github.com/user-attachments/assets/adefbc28-9850-43d1-8530-224fd2bd4448)
+
+![image](https://github.com/user-attachments/assets/7bbac2c0-0d0f-43e1-a7c4-49948c5361a3)
+
+
+
+[![image](https://github.com/user-attachments/assets/42fabac4-3bc9-4dd3-a2b3-9d571eb8baae)](https://github.com/SumitShinde0702/StuDebt/blob/main/images/accept_offer.png)
+
 
 
 ## 🤝 Contributing
